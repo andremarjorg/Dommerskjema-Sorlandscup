@@ -309,21 +309,41 @@ function escapeHtml(str){
   return div.innerHTML;
 }
 
-// ---- Google Sheets API (via Apps Script) ----
+// ---- Google Sheets API (via Apps Script, JSONP — unngår CORS-blokkering) ----
+let jsonpCounter = 0;
+function jsonpRequest(params){
+  return new Promise((resolve, reject) => {
+    const callbackName = 'jsonp_cb_' + (jsonpCounter++) + '_' + Date.now();
+    const query = new URLSearchParams({ ...params, callback: callbackName }).toString();
+    const script = document.createElement('script');
+    const cleanup = () => { delete window[callbackName]; script.remove(); };
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      reject(new Error('Tidsavbrudd mot Google Sheet'));
+    }, 15000);
+    window[callbackName] = (data) => {
+      clearTimeout(timeoutId);
+      cleanup();
+      resolve(data);
+    };
+    script.onerror = () => {
+      clearTimeout(timeoutId);
+      cleanup();
+      reject(new Error('Kunne ikke nå Google Sheet'));
+    };
+    script.src = APPS_SCRIPT_URL + '?' + query;
+    document.body.appendChild(script);
+  });
+}
+
 async function apiGet(){
-  const res = await fetch(APPS_SCRIPT_URL, { method: 'GET' });
-  if(!res.ok) throw new Error('Henting feilet (' + res.status + ')');
-  return res.json();
+  return jsonpRequest({});
 }
 
 async function apiPost(payload){
-  const res = await fetch(APPS_SCRIPT_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(payload)
-  });
-  if(!res.ok) throw new Error('Lagring feilet (' + res.status + ')');
-  return res.json();
+  const result = await jsonpRequest({ action: 'save', payload: JSON.stringify(payload) });
+  if(!result || result.ok !== true) throw new Error(result && result.error ? result.error : 'Lagring feilet');
+  return result;
 }
 
 async function refreshData(){
