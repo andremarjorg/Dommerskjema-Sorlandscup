@@ -243,7 +243,7 @@
         <h2 style="margin:0;">Innsendte smaksdommer-vurderinger</h2>
         <button class="ghost on-paper refresh-btn" data-role="smaksdommer">Oppdater</button>
       </div>
-      <div class="sub2">Delsum = presentasjon + smak for både hovedrett og dessert, summert over 8 lag.</div>
+      <div class="sub2">Delsum = presentasjon + smak + innovasjon for både hovedrett og dessert, summert over 8 lag.</div>
       <div class="role-entries-area"><div class="loading-state">Henter …</div></div>
     </div>
   </section>
@@ -260,7 +260,7 @@
         <h2 style="margin:0;">Totaloversikt</h2>
         <button class="ghost on-paper refresh-btn" data-role="totaloversikt">Oppdater</button>
       </div>
-      <div class="sub2">Snitt av alle innsendte dommervurderinger per kategori, summert til en totalsum per lag (maks 100).</div>
+      <div class="sub2">Snitt av alle innsendte dommervurderinger per kategori, summert til en totalsum per lag (maks 100). *Gull med utmerkelse ved eksakt 100 poeng krever at alle dommere er enige — bekreftes manuelt, ikke automatisk.</div>
       <div class="counts-strip" id="countsStrip"></div>
       <div id="totalResultsArea"><div class="loading-state">Henter alle vurderinger …</div></div>
     </div>
@@ -287,18 +287,21 @@ const CRITERIA = {
     'Kontroll på overskudd og matsvinn',
     'Begrensning av plastavfall'
   ]},
-  prep: { title:'Faglig korrekt tilberedning', max:20, desc:[
+  prep: { title:'Faglig korrekt tilberedning', max:15, desc:[
     'Korrekt grunnleggende tilberedning i tråd med moderne kokkekunst',
     'Praktiske, aksepterte metoder uten unødvendige ingredienser',
     'Riktige tilberedningsteknikker for alle råvarer, inkl. stivelse og grønnsaker',
-    'God arbeidsteknikk og hygiene under tilberedning'
+    'God arbeidsteknikk og hygiene under tilberedning',
+    'Gjennomgang av matsvinn, inkludert overskuddsvarer',
+    'Vurdering av samarbeid og tidsbruk ved tilberedning/servering'
   ]},
-  service: { title:'Servering', max:5, desc:[
+  service: { title:'Servering', max:5, startAtMax:true, desc:[
     'Riktig antall tallerkener presentert',
     'Rettene skal være praktiske og transportable',
-    'Rettene må presenteres i tide — ellers trekk'
+    'Rettene må presenteres i tide — ellers trekk',
+    'Starter på full pott — trekk gis kun ved avvik'
   ]},
-  presentation_hovedrett: { title:'Presentasjon og innovasjon', max:5, desc:[
+  presentation_hovedrett: { title:'Presentasjon', max:5, desc:[
     'Råvarer og tilbehør i harmoni',
     'Poeng for god kombinasjon, enkelhet og originalitet',
     'Ryddig anretning uten kunstig pynt eller tidkrevende arrangement',
@@ -309,7 +312,13 @@ const CRITERIA = {
     'Riktig smak og krydring',
     'Kvalitet, smak og farge skal følge dagens standarder'
   ]},
-  presentation_dessert: { title:'Presentasjon og innovasjon', max:5, desc:[
+  innovation_hovedrett: { title:'Innovasjon', max:2.5, desc:[
+    'Introduksjon av ny teknikk, eller en vesentlig forbedring av en eksisterende rett',
+    'Ny anretningsstil som overgår gjestens/dommerens forventning',
+    'Rom for å skape en «wow-faktor»',
+    'Skåres fra 0 og opp til maks poengsum'
+  ]},
+  presentation_dessert: { title:'Presentasjon', max:5, desc:[
     'Råvarer og tilbehør i harmoni',
     'Poeng for god kombinasjon, enkelhet og originalitet',
     'Ryddig anretning uten kunstig pynt eller tidkrevende arrangement',
@@ -320,16 +329,27 @@ const CRITERIA = {
     'Riktig smak og krydring',
     'Kvalitet, smak og farge skal følge dagens standarder'
   ]},
+  innovation_dessert: { title:'Innovasjon', max:2.5, desc:[
+    'Introduksjon av ny teknikk, eller en vesentlig forbedring av en eksisterende rett',
+    'Ny anretningsstil som overgår gjestens/dommerens forventning',
+    'Rom for å skape en «wow-faktor»',
+    'Skåres fra 0 og opp til maks poengsum'
+  ]},
 };
 
 const ROLES = {
   plassdommer: { label:'Plassdommer', criteria:['mise','hygiene','prep'] },
   tidtaker: { label:'Tidtaker', criteria:['service'] },
   smaksdommer: { label:'Smaksdommer', groups:[
-    { label:'Hovedrett', criteria:['presentation_hovedrett','taste_hovedrett'] },
-    { label:'Dessert', criteria:['presentation_dessert','taste_dessert'] },
+    { label:'Hovedrett', criteria:['presentation_hovedrett','taste_hovedrett','innovation_hovedrett'] },
+    { label:'Dessert', criteria:['presentation_dessert','taste_dessert','innovation_dessert'] },
   ]},
 };
+
+function defaultScoreFor(critKey){
+  const def = CRITERIA[critKey];
+  return def.startAtMax ? def.max : 0;
+}
 
 function getRoleCriteria(role){
   const cfg = ROLES[role];
@@ -344,14 +364,15 @@ const roleState = {};
 Object.keys(ROLES).forEach(role => {
   roleState[role] = Array.from({length:TEAM_COUNT}, () => {
     const obj = {};
-    getRoleCriteria(role).forEach(c => obj[c] = 0);
+    getRoleCriteria(role).forEach(c => obj[c] = defaultScoreFor(c));
     return obj;
   });
 });
 
-const MEDAL_COLORS = { 'Gull':'var(--gold)', 'Sølv':'var(--silver)', 'Bronse':'var(--bronze)', 'Diplom':'var(--diploma)', 'Under diplomgrense':'#7a7466' };
+const MEDAL_COLORS = { 'Gull med utmerkelse*':'var(--gold)', 'Gull':'var(--gold)', 'Sølv':'var(--silver)', 'Bronse':'var(--bronze)', 'Diplom':'var(--diploma)', 'Under diplomgrense':'#7a7466' };
 
 function medalFor(total){
+  if(total >= 100) return 'Gull med utmerkelse*';
   if(total >= 90) return 'Gull';
   if(total >= 80) return 'Sølv';
   if(total >= 70) return 'Bronse';
@@ -418,8 +439,8 @@ function buildPanel(role){
     const rows = teams.map((name, idx) => `
       <tr>
         <td class="team-label" data-role="${role}" data-crit="${critKey}" data-idx="${idx}">${escapeHtml(name)}</td>
-        <td class="slider-cell"><input type="range" min="0" max="${def.max}" step="0.5" value="0" id="range-${role}-${critKey}-${idx}"></td>
-        <td class="num-cell"><input type="number" class="score-input" min="0" max="${def.max}" step="0.5" value="0" id="num-${role}-${critKey}-${idx}"></td>
+        <td class="slider-cell"><input type="range" min="0" max="${def.max}" step="0.5" value="${defaultScoreFor(critKey)}" id="range-${role}-${critKey}-${idx}"></td>
+        <td class="num-cell"><input type="number" class="score-input" min="0" max="${def.max}" step="0.5" value="${defaultScoreFor(critKey)}" id="num-${role}-${critKey}-${idx}"></td>
       </tr>
     `).join('');
     return `
@@ -484,11 +505,12 @@ function updateAllTeamLabels(){
 function resetRolePanel(role){
   getRoleCriteria(role).forEach(critKey => {
     teams.forEach((_, idx) => {
-      roleState[role][idx][critKey] = 0;
+      const defaultVal = defaultScoreFor(critKey);
+      roleState[role][idx][critKey] = defaultVal;
       const range = document.getElementById(`range-${role}-${critKey}-${idx}`);
       const num = document.getElementById(`num-${role}-${critKey}-${idx}`);
-      if(range) range.value = 0;
-      if(num) num.value = 0;
+      if(range) range.value = defaultVal;
+      if(num) num.value = defaultVal;
     });
   });
   document.getElementById(`judge-${role}`).value = '';
@@ -603,13 +625,16 @@ async function loadTotaloversikt(){
       const presDessert = avgFor('smaksdommer', idx, 'presentation_dessert');
       const tasteHovedrett = avgFor('smaksdommer', idx, 'taste_hovedrett');
       const tasteDessert = avgFor('smaksdommer', idx, 'taste_dessert');
+      const innoHovedrett = avgFor('smaksdommer', idx, 'innovation_hovedrett');
+      const innoDessert = avgFor('smaksdommer', idx, 'innovation_dessert');
       const presentation = (presHovedrett !== null && presDessert !== null) ? presHovedrett + presDessert : null;
       const taste = (tasteHovedrett !== null && tasteDessert !== null) ? tasteHovedrett + tasteDessert : null;
-      const parts = [mise, hygiene, prep, service, presentation, taste];
+      const innovation = (innoHovedrett !== null && innoDessert !== null) ? innoHovedrett + innoDessert : null;
+      const parts = [mise, hygiene, prep, service, presentation, taste, innovation];
       const complete = parts.every(p => p !== null);
       const total = Math.round(parts.reduce((s,p) => s + (p || 0), 0) * 10) / 10;
       const medal = complete ? medalFor(total) : null;
-      return { name, mise, hygiene, prep, service, presentation, taste, total, complete, medal };
+      return { name, mise, hygiene, prep, service, presentation, taste, innovation, total, complete, medal };
     });
 
     rows.sort((a,b) => b.total - a.total);
@@ -617,7 +642,7 @@ async function loadTotaloversikt(){
     const fmt = v => v === null ? '–' : Math.round(v * 10) / 10;
 
     let html = `<table class="entries"><thead><tr>
-      <th>Lag</th><th>Materialer</th><th>Hygiene</th><th>Tilberedning</th><th>Servering</th><th>Presentasjon</th><th>Smak</th><th>Totalsum</th><th>Medalje</th>
+      <th>Lag</th><th>Materialer</th><th>Hygiene</th><th>Tilberedning</th><th>Servering</th><th>Presentasjon</th><th>Smak</th><th>Innovasjon</th><th>Totalsum</th><th>Medalje</th>
     </tr></thead><tbody>`;
     rows.forEach(r => {
       const medalHtml = r.complete
@@ -626,7 +651,7 @@ async function loadTotaloversikt(){
       html += `<tr>
         <td>${escapeHtml(r.name)}</td>
         <td>${fmt(r.mise)}</td><td>${fmt(r.hygiene)}</td><td>${fmt(r.prep)}</td>
-        <td>${fmt(r.service)}</td><td>${fmt(r.presentation)}</td><td>${fmt(r.taste)}</td>
+        <td>${fmt(r.service)}</td><td>${fmt(r.presentation)}</td><td>${fmt(r.taste)}</td><td>${fmt(r.innovation)}</td>
         <td>${r.total}</td><td>${medalHtml}</td>
       </tr>`;
     });
