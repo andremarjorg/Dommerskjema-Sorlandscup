@@ -531,11 +531,13 @@ async function saveRoleEntry(role){
   statusEl.style.color = 'var(--gold)';
   statusEl.textContent = 'Lagrer til Google Sheet …';
 
+  const critOrder = getRoleCriteria(role);
   const payload = {
     role,
     judge,
     timestamp: new Date().toISOString(),
-    teams: roleState[role].map((t, idx) => ({ name: teams[idx], ...t })),
+    criteriaOrder: critOrder,
+    teams: roleState[role].map((t, idx) => [teams[idx], ...critOrder.map(c => t[c])]),
   };
 
   try{
