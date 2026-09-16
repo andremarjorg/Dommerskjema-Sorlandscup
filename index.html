@@ -456,8 +456,9 @@ async function saveRoleEntry(role){
     resetRolePanel(role);
     await loadRoleEntries(role);
   }catch(err){
-    statusEl.textContent = 'Lagring feilet. Sjekk nettforbindelsen og prøv igjen.';
+    statusEl.textContent = 'Lagring feilet: ' + (err && err.message ? err.message : 'ukjent feil') + ' (se konsollen for detaljer)';
     statusEl.style.color = 'var(--danger)';
+    console.error('Lagring feilet:', err);
   }
   saveBtn.disabled = false;
 }
