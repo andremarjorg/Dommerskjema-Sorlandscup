@@ -193,7 +193,7 @@
         <h2 style="margin:0;">Innsendte plassdommer-vurderinger</h2>
         <button class="ghost on-paper refresh-btn" data-role="plassdommer">Oppdater</button>
       </div>
-      <div class="sub2">Delsum = materialer + hygiene + faglig tilberedning, summert over 8 lag. Feilregistrering rettes direkte i «Innsendinger»-arket.</div>
+      <div class="sub2">Delsum = materialer + hygiene + faglig tilberedning + innovasjon, summert over 8 lag. Feilregistrering rettes direkte i «Innsendinger»-arket.</div>
       <div class="role-entries-area"><div class="loading-state">Henter …</div></div>
     </div>
   </section>
@@ -243,7 +243,7 @@
         <h2 style="margin:0;">Innsendte smaksdommer-vurderinger</h2>
         <button class="ghost on-paper refresh-btn" data-role="smaksdommer">Oppdater</button>
       </div>
-      <div class="sub2">Delsum = presentasjon + smak + innovasjon for både hovedrett og dessert, summert over 8 lag.</div>
+      <div class="sub2">Delsum = presentasjon + smak for både hovedrett og dessert, summert over 8 lag.</div>
       <div class="role-entries-area"><div class="loading-state">Henter …</div></div>
     </div>
   </section>
@@ -295,6 +295,12 @@ const CRITERIA = {
     'Gjennomgang av matsvinn, inkludert overskuddsvarer',
     'Vurdering av samarbeid og tidsbruk ved tilberedning/servering'
   ]},
+  innovation: { title:'Innovasjon', max:5, desc:[
+    'Introduksjon av ny teknikk, eller en vesentlig forbedring av en eksisterende rett',
+    'Ny anretningsstil som overgår gjestens/dommerens forventning',
+    'Rom for å skape en «wow-faktor»',
+    'Skåres fra 0 og opp til maks poengsum'
+  ]},
   service: { title:'Servering', max:5, startAtMax:true, desc:[
     'Riktig antall tallerkener presentert',
     'Rettene skal være praktiske og transportable',
@@ -312,12 +318,6 @@ const CRITERIA = {
     'Riktig smak og krydring',
     'Kvalitet, smak og farge skal følge dagens standarder'
   ]},
-  innovation_hovedrett: { title:'Innovasjon', max:2.5, desc:[
-    'Introduksjon av ny teknikk, eller en vesentlig forbedring av en eksisterende rett',
-    'Ny anretningsstil som overgår gjestens/dommerens forventning',
-    'Rom for å skape en «wow-faktor»',
-    'Skåres fra 0 og opp til maks poengsum'
-  ]},
   presentation_dessert: { title:'Presentasjon', max:5, desc:[
     'Råvarer og tilbehør i harmoni',
     'Poeng for god kombinasjon, enkelhet og originalitet',
@@ -329,20 +329,14 @@ const CRITERIA = {
     'Riktig smak og krydring',
     'Kvalitet, smak og farge skal følge dagens standarder'
   ]},
-  innovation_dessert: { title:'Innovasjon', max:2.5, desc:[
-    'Introduksjon av ny teknikk, eller en vesentlig forbedring av en eksisterende rett',
-    'Ny anretningsstil som overgår gjestens/dommerens forventning',
-    'Rom for å skape en «wow-faktor»',
-    'Skåres fra 0 og opp til maks poengsum'
-  ]},
 };
 
 const ROLES = {
-  plassdommer: { label:'Plassdommer', criteria:['mise','hygiene','prep'] },
+  plassdommer: { label:'Plassdommer', criteria:['mise','hygiene','prep','innovation'] },
   tidtaker: { label:'Tidtaker', criteria:['service'] },
   smaksdommer: { label:'Smaksdommer', groups:[
-    { label:'Hovedrett', criteria:['presentation_hovedrett','taste_hovedrett','innovation_hovedrett'] },
-    { label:'Dessert', criteria:['presentation_dessert','taste_dessert','innovation_dessert'] },
+    { label:'Hovedrett', criteria:['presentation_hovedrett','taste_hovedrett'] },
+    { label:'Dessert', criteria:['presentation_dessert','taste_dessert'] },
   ]},
 };
 
@@ -361,6 +355,7 @@ let teams = Array.from({length:TEAM_COUNT}, (_,i) => `Lag ${i+1}`);
 let allEntries = [];
 
 const roleState = {};
+const dirtyRoles = new Set();
 Object.keys(ROLES).forEach(role => {
   roleState[role] = Array.from({length:TEAM_COUNT}, () => {
     const obj = {};
@@ -471,6 +466,7 @@ function buildPanel(role){
         roleState[role][idx][critKey] = val;
         range.value = val;
         num.value = val;
+        dirtyRoles.add(role);
         updateSubtotals(role);
       }
       range.addEventListener('input', e => update(e.target.value));
@@ -514,6 +510,7 @@ function resetRolePanel(role){
     });
   });
   document.getElementById(`judge-${role}`).value = '';
+  dirtyRoles.delete(role);
   updateSubtotals(role);
 }
 
@@ -627,11 +624,9 @@ async function loadTotaloversikt(){
       const presDessert = avgFor('smaksdommer', idx, 'presentation_dessert');
       const tasteHovedrett = avgFor('smaksdommer', idx, 'taste_hovedrett');
       const tasteDessert = avgFor('smaksdommer', idx, 'taste_dessert');
-      const innoHovedrett = avgFor('smaksdommer', idx, 'innovation_hovedrett');
-      const innoDessert = avgFor('smaksdommer', idx, 'innovation_dessert');
+      const innovation = avgFor('plassdommer', idx, 'innovation');
       const presentation = (presHovedrett !== null && presDessert !== null) ? presHovedrett + presDessert : null;
       const taste = (tasteHovedrett !== null && tasteDessert !== null) ? tasteHovedrett + tasteDessert : null;
-      const innovation = (innoHovedrett !== null && innoDessert !== null) ? innoHovedrett + innoDessert : null;
       const parts = [mise, hygiene, prep, service, presentation, taste, innovation];
       const complete = parts.every(p => p !== null);
       const total = Math.round(parts.reduce((s,p) => s + (p || 0), 0) * 10) / 10;
@@ -644,7 +639,7 @@ async function loadTotaloversikt(){
     const fmt = v => v === null ? '–' : Math.round(v * 10) / 10;
 
     let html = `<table class="entries"><thead><tr>
-      <th>Lag</th><th>Materialer</th><th>Hygiene</th><th>Tilberedning</th><th>Servering</th><th>Presentasjon</th><th>Smak</th><th>Innovasjon</th><th>Totalsum</th><th>Medalje</th>
+      <th>Lag</th><th>Materialer</th><th>Hygiene</th><th>Tilberedning</th><th>Innovasjon</th><th>Servering</th><th>Presentasjon</th><th>Smak</th><th>Totalsum</th><th>Medalje</th>
     </tr></thead><tbody>`;
     rows.forEach(r => {
       const medalHtml = r.complete
@@ -652,8 +647,8 @@ async function loadTotaloversikt(){
         : `<span class="medal-tag" style="background:#7a7466">Ufullstendig</span>`;
       html += `<tr>
         <td>${escapeHtml(r.name)}</td>
-        <td>${fmt(r.mise)}</td><td>${fmt(r.hygiene)}</td><td>${fmt(r.prep)}</td>
-        <td>${fmt(r.service)}</td><td>${fmt(r.presentation)}</td><td>${fmt(r.taste)}</td><td>${fmt(r.innovation)}</td>
+        <td>${fmt(r.mise)}</td><td>${fmt(r.hygiene)}</td><td>${fmt(r.prep)}</td><td>${fmt(r.innovation)}</td>
+        <td>${fmt(r.service)}</td><td>${fmt(r.presentation)}</td><td>${fmt(r.taste)}</td>
         <td>${r.total}</td><td>${medalHtml}</td>
       </tr>`;
     });
@@ -690,6 +685,13 @@ function initTabs(){
   const initial = (location.hash || '').replace('#', '');
   switchTab(validRoles.includes(initial) ? initial : 'plassdommer');
 }
+
+window.addEventListener('beforeunload', (e) => {
+  if(dirtyRoles.size > 0){
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
 
 (async function init(){
   Object.keys(ROLES).forEach(buildPanel);
